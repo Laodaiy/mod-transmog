@@ -95,6 +95,8 @@ enum PlusFeatures
     PLUS_FEATURE_SKIP_LEVEL_REQ
 };
 
+const uint32 TMOG_VENDOR_CREATURE_ID = 190010;
+
 class Transmogrification
 {
 public:
@@ -106,10 +108,13 @@ public:
     typedef std::unordered_map<uint32, std::vector<uint32>> collectionCacheMap;
     typedef std::unordered_map<uint32, std::string> searchStringMap;
     typedef std::unordered_map<uint32, std::vector<uint32>> transmogPlusData;
+    typedef std::unordered_map<ObjectGuid, uint8> selectedSlotMap;
+    
     transmogPlusData plusDataMap;
     transmogMap entryMap; // entryMap[pGUID][iGUID] = entry
     transmogData dataMap; // dataMap[iGUID] = pGUID
     collectionCacheMap collectionCache;
+    selectedSlotMap selectionCache;
 
 #ifdef PRESETS
     bool EnableSetInfo;
@@ -130,8 +135,6 @@ public:
     uint8 MaxSets;
     float SetCostModifier;
     int32 SetCopperCost;
-
-    uint32 PetSpellId;
 
     bool GetEnableSets() const;
     uint8 GetMaxSets() const;
@@ -184,7 +187,11 @@ public:
     bool IgnoreReqStats;
 
     bool UseCollectionSystem;
+    bool UseVendorInterface;
+    
     bool AllowHiddenTransmog;
+    bool HiddenTransmogIsFree;
+    
     bool TrackUnusableItems;
     bool RetroActiveAppearances;
     bool ResetRetroActiveAppearances;
@@ -241,7 +248,9 @@ public:
     bool GetAllowTradeable() const;
 
     bool GetUseCollectionSystem() const;
+    bool GetUseVendorInterface() const;
     bool GetAllowHiddenTransmog() const;
+    bool GetHiddenTransmogIsFree() const;
     bool GetTrackUnusableItems() const;
     bool EnableRetroActiveAppearances() const;
     bool EnableResetRetroActiveAppearances() const;
@@ -262,9 +271,11 @@ public:
     bool IsTransmogPlusEnabled;
     [[nodiscard]] bool IsPlusFeatureEligible(ObjectGuid const& playerGuid, uint32 feature) const;
     uint32 getPlayerMembershipLevel(ObjectGuid const & playerGuid) const;
-
     [[nodiscard]] bool IgnoreLevelRequirement(ObjectGuid const& playerGuid) const { return IgnoreReqLevel || IsPlusFeatureEligible(playerGuid, PLUS_FEATURE_SKIP_LEVEL_REQ); }
 
+    uint32 PetSpellId;
+    uint32 PetEntry;
+    [[nodiscard]] bool IsTransmogVendor(uint32 entry) const { return entry == TMOG_VENDOR_CREATURE_ID || entry == PetEntry; };
 };
 #define sTransmogrification Transmogrification::instance()
 
