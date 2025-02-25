@@ -442,7 +442,7 @@ void PerformTransmogrification (Player* player, uint32 itemEntry, uint32 cost)
     }
     TransmogAcoreStrings res = sT->Transmogrify(player, itemEntry, slot);
     if (res == LANG_ERR_TRANSMOG_OK)
-        session->SendAreaTriggerMessage("%s",GTS(LANG_ERR_TRANSMOG_OK));
+        session->SendAreaTriggerMessage("{}",GTS(LANG_ERR_TRANSMOG_OK));
     else
         ChatHandler(session).SendNotification(res);
 }
@@ -456,7 +456,7 @@ void RemoveTransmogrification (Player* player)
         if (sT->GetFakeEntry(newItem->GetGUID()))
         {
             sT->DeleteFakeEntry(player, slot, newItem);
-            session->SendAreaTriggerMessage("%s", GTS(LANG_ERR_UNTRANSMOG_OK));
+            session->SendAreaTriggerMessage("{}", GTS(LANG_ERR_UNTRANSMOG_OK));
         }
         else
             ChatHandler(session).SendNotification(LANG_ERR_UNTRANSMOG_NO_TRANSMOGS);
@@ -484,7 +484,7 @@ public:
                 }
             }
 
-            return sTransmogrification->IsEnabled() && (target && !target->GetPlayerSetting("mod-transmog", SETTING_HIDE_TRANSMOG).value);
+            return sTransmogrification->IsEnabled() && (target && !target->GetPlayerSetting("mod-transmog", SETTING_HIDE_TRANSMOG).IsEnabled());
         }
     };
 
@@ -537,13 +537,18 @@ public:
         switch (sender)
         {
             case EQUIPMENT_SLOT_END: // Show items you can use
+            {
                 sT->selectionCache[player->GetGUID()] = action;
 
-                if (sT->GetUseVendorInterface())
+                bool useVendorInterface = player->GetPlayerSetting("mod-transmog", SETTING_VENDOR_INTERFACE).IsEnabled();
+
+                if (sT->GetUseVendorInterface() || useVendorInterface)
                     ShowTransmogItemsInFakeVendor(player, creature, action);
                 else
                     ShowTransmogItemsInGossipMenu(player, creature, action, sender);
+
                 break;
+            }
             case EQUIPMENT_SLOT_END + 1: // Main menu
                 OnGossipHello(player, creature);
                 break;
@@ -563,7 +568,7 @@ public:
                 }
                 if (removed)
                 {
-                    session->SendAreaTriggerMessage("%s", GTS(LANG_ERR_UNTRANSMOG_OK));
+                    session->SendAreaTriggerMessage("{}", GTS(LANG_ERR_UNTRANSMOG_OK));
                     CharacterDatabase.CommitTransaction(trans);
                 }
                 else
@@ -1038,16 +1043,27 @@ private:
         player->UpdatePlayerSetting("mod-transmog", SETTING_RETROACTIVE_CHECK, 1);
     }
 public:
-    PS_Transmogrification() : PlayerScript("Player_Transmogrify") { }
+    PS_Transmogrification() : PlayerScript("Player_Transmogrify", {
+        PLAYERHOOK_ON_EQUIP,
+        PLAYERHOOK_ON_LOOT_ITEM,
+        PLAYERHOOK_ON_CREATE_ITEM,
+        PLAYERHOOK_ON_AFTER_STORE_OR_EQUIP_NEW_ITEM,
+        PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST,
+        PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT,
+        PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY,
+        PLAYERHOOK_ON_LOGIN,
+        PLAYERHOOK_ON_LOGOUT,
+        PLAYERHOOK_ON_BEFORE_BUY_ITEM_FROM_VENDOR
+    }) { }
 
-    void OnEquip(Player* player, Item* it, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) override
+    void OnPlayerEquip(Player* player, Item* it, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) override
     {
         if (!sT->GetUseCollectionSystem())
             return;
         AddToDatabase(player, it);
     }
 
-    void OnLootItem(Player* player, Item* item, uint32 /*count*/, ObjectGuid /*lootguid*/) override
+    void OnPlayerLootItem(Player* player, Item* item, uint32 /*count*/, ObjectGuid /*lootguid*/) override
     {
         if (!sT->GetUseCollectionSystem() || !item || typeid(*item) != typeid(Item))
             return;
@@ -1057,7 +1073,7 @@ public:
         }
     }
 
-    void OnCreateItem(Player* player, Item* item, uint32 /*count*/) override
+    void OnPlayerCreateItem(Player* player, Item* item, uint32 /*count*/) override
     {
         if (!sT->GetUseCollectionSystem())
             return;
@@ -1067,7 +1083,7 @@ public:
         }
     }
 
-    void OnAfterStoreOrEquipNewItem(Player* player, uint32 /*vendorslot*/, Item* item, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/, ItemTemplate const* /*pProto*/, Creature* /*pVendor*/, VendorItem const* /*crItem*/, bool /*bStore*/) override
+    void OnPlayerAfterStoreOrEquipNewItem(Player* player, uint32 /*vendorslot*/, Item* item, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/, ItemTemplate const* /*pProto*/, Creature* /*pVendor*/, VendorItem const* /*crItem*/, bool /*bStore*/) override
     {
         if (!sT->GetUseCollectionSystem())
             return;
@@ -1100,7 +1116,7 @@ public:
         }
     }
 
-    void OnAfterSetVisibleItemSlot(Player* player, uint8 slot, Item *item) override
+    void OnPlayerAfterSetVisibleItemSlot(Player* player, uint8 slot, Item *item) override
     {
         if (!item)
             return;
@@ -1111,12 +1127,12 @@ public:
         }
     }
 
-    void OnAfterMoveItemFromInventory(Player* /*player*/, Item* it, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) override
+    void OnPlayerAfterMoveItemFromInventory(Player* /*player*/, Item* it, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) override
     {
         sT->DeleteFakeFromDB(it->GetGUID().GetCounter());
     }
 
-    void OnLogin(Player* player) override
+    void OnPlayerLogin(Player* player) override
     {
         if (sT->EnableResetRetroActiveAppearances())
             player->UpdatePlayerSetting("mod-transmog", SETTING_RETROACTIVE_CHECK, 0);
@@ -1164,7 +1180,7 @@ public:
 #endif
     }
 
-    void OnLogout(Player* player) override
+    void OnPlayerLogout(Player* player) override
     {
         ObjectGuid pGUID = player->GetGUID();
         for (Transmogrification::transmog2Data::const_iterator it = sT->entryMap[pGUID].begin(); it != sT->entryMap[pGUID].end(); ++it)
@@ -1178,7 +1194,7 @@ public:
 #endif
     }
 
-    void OnBeforeBuyItemFromVendor(Player* player, ObjectGuid vendorguid, uint32 /*vendorslot*/, uint32& itemEntry, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/) override
+    void OnPlayerBeforeBuyItemFromVendor(Player* player, ObjectGuid vendorguid, uint32 /*vendorslot*/, uint32& itemEntry, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/) override
     {
         Creature* vendor = player->GetMap()->GetCreature(vendorguid);
         if (!vendor)
@@ -1209,7 +1225,10 @@ public:
 class WS_Transmogrification : public WorldScript
 {
 public:
-    WS_Transmogrification() : WorldScript("WS_Transmogrification") { }
+    WS_Transmogrification() : WorldScript("WS_Transmogrification", {
+        WORLDHOOK_ON_AFTER_CONFIG_LOAD,
+        WORLDHOOK_ON_STARTUP
+    }) { }
 
     void OnAfterConfigLoad(bool reload) override
     {
@@ -1252,7 +1271,10 @@ public:
 class global_transmog_script : public GlobalScript
 {
 public:
-    global_transmog_script() : GlobalScript("global_transmog_script") { }
+    global_transmog_script() : GlobalScript("global_transmog_script", {
+        GLOBALHOOK_ON_ITEM_DEL_FROM_DB,
+        GLOBALHOOK_ON_MIRRORIMAGE_DISPLAY_ITEM
+    }) { }
 
     void OnItemDelFromDB(CharacterDatabaseTransaction trans, ObjectGuid::LowType itemGuid) override
     {
@@ -1278,7 +1300,10 @@ public:
 class unit_transmog_script : public UnitScript
 {
 public:
-    unit_transmog_script() : UnitScript("unit_transmog_script") { }
+    unit_transmog_script() : UnitScript("unit_transmog_script", true, {
+        UNITHOOK_SHOULD_TRACK_VALUES_UPDATE_POS_BY_INDEX,
+        UNITHOOK_ON_PATCH_VALUES_UPDATE
+    }) { }
 
     bool ShouldTrackValuesUpdatePosByIndex(Unit const* unit, uint8 /*updateType*/, uint16 index) override
     {
